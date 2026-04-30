@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FindYourDate — Project Visualizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+  <style>
+    /* ── Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2e3148;
+      --accent:    #e83e8c;
+      --accent2:   #6f42c1;
+      --accent3:   #20c997;
+      --accent4:   #fd7e14;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --radius:    12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    header {
+      padding: 24px 32px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: linear-gradient(135deg, #1a1d27 0%, #0f1117 100%);
+    }
+    header .logo {
+      font-size: 28px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p { color: var(--muted); font-size: 14px; }
+
+    /* ── Tab nav ─────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 16px 32px 0;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .tab-btn {
+      padding: 10px 22px;
+      border: none;
+      border-radius: var(--radius) var(--radius) 0 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s;
+    }
+    .tab-btn:hover { color: var(--text); background: rgba(255,255,255,.05); }
+    .tab-btn.active { background: var(--bg); color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+    /* ── Panels ──────────────────────────────────────────── */
+    .panel { display: none; padding: 32px; animation: fadeIn .25s ease; }
+    .panel.active { display: block; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px) } to { opacity:1; transform:none } }
+
+    /* ── Section title ───────────────────────────────────── */
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* ── Stat cards ──────────────────────────────────────── */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      text-align: center;
+    }
+    .stat-card .num { font-size: 32px; font-weight: 800; }
+    .stat-card .label { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .c1 .num { color: var(--accent); }
+    .c2 .num { color: var(--accent2); }
+    .c3 .num { color: var(--accent3); }
+    .c4 .num { color: var(--accent4); }
+
+    /* ── Tech badges ─────────────────────────────────────── */
+    .badge-wrap { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 32px; }
+    .badge {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .badge span.dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+    /* ── Route table ─────────────────────────────────────── */
+    .route-table { width:100%; border-collapse:separate; border-spacing:0 6px; }
+    .route-table th {
+      text-align:left; padding:8px 16px; font-size:11px;
+      letter-spacing:.1em; text-transform:uppercase; color:var(--muted);
+    }
+    .route-table td {
+      padding:12px 16px; background:var(--surface);
+      border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+      font-size:13px;
+    }
+    .route-table td:first-child { border-left:1px solid var(--border); border-radius:var(--radius) 0 0 var(--radius); }
+    .route-table td:last-child  { border-right:1px solid var(--border); border-radius:0 var(--radius) var(--radius) 0; }
+    .method {
+      display:inline-block; padding:2px 10px; border-radius:4px;
+      font-size:11px; font-weight:700; letter-spacing:.06em;
+    }
+    .GET  { background:#1a4731; color:#4ade80; }
+    .POST { background:#1e2f5e; color:#60a5fa; }
+    .lock { font-size:11px; color:var(--accent); }
+
+    /* ── Flow diagram (SVG canvas) ───────────────────────── */
+    #flow-canvas {
+      width:100%;
+      height:580px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      overflow:hidden;
+    }
+
+    /* ── Model cards ─────────────────────────────────────── */
+    .model-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:20px; }
+    .model-card {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      overflow:hidden;
+    }
+    .model-head {
+      padding:14px 18px;
+      font-weight:700; font-size:15px;
+      border-bottom:1px solid var(--border);
+      display:flex; align-items:center; gap:10px;
+    }
+    .model-head .icon { font-size:20px; }
+    .field-list { list-style:none; padding:12px 0; }
+    .field-list li {
+      display:flex; justify-content:space-between; align-items:center;
+      padding:7px 18px; font-size:13px;
+      border-bottom:1px solid rgba(255,255,255,.04);
+    }
+    .field-list li:last-child { border-bottom:none; }
+    .field-name { color:var(--text); }
+    .field-type {
+      font-size:11px; font-weight:600; padding:2px 8px;
+      border-radius:4px; background:rgba(255,255,255,.06); color:var(--muted);
+    }
+    .field-badge {
+      font-size:10px; padding:1px 6px; border-radius:3px;
+      margin-left:6px; font-weight:700;
+    }
+    .req  { background:#3b1f1f; color:#f87171; }
+    .uniq { background:#1f2e3b; color:#60a5fa; }
+    .ref  { background:#1e2f3b; color:var(--accent3); }
+
+    /* ── Journey steps ───────────────────────────────────── */
+    .journey {
+      display:flex; flex-wrap:wrap; gap:0;
+      counter-reset: step;
+      margin-bottom:32px;
+    }
+    .step {
+      display:flex; align-items:flex-start; gap:14px;
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px 20px;
+      flex:1 1 220px;
+      position:relative;
+    }
+    .step + .step::before {
+      content:'›';
+      position:absolute; left:-14px; top:50%; transform:translateY(-50%);
+      font-size:24px; color:var(--muted); z-index:1;
+    }
+    .step-num {
+      width:32px; height:32px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:13px; font-weight:800; flex-shrink:0;
+    }
+    .step-body h4 { font-size:14px; font-weight:700; margin-bottom:4px; }
+    .step-body p  { font-size:12px; color:var(--muted); line-height:1.5; }
+
+    /* ── Socket section ──────────────────────────────────── */
+    .socket-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+    .socket-card {
+      background:var(--surface);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      padding:18px;
+    }
+    .socket-card h4 { font-size:13px; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
+    .socket-card p { font-size:12px; color:var(--muted); line-height:1.6; }
+    .evt { display:inline-block; font-size:11px; background:rgba(232,62,140,.15); color:var(--accent); padding:2px 8px; border-radius:4px; font-family:monospace; }
+
+    /* ── Scrollable wrapper ──────────────────────────────── */
+    .scroll-x { overflow-x:auto; }
+  </style>
+</head>
+<body>
+
+<!-- ════════════════════════════════ HEADER ═══════════════════════════════ -->
+<header>
+  <div>
+    <div class="logo">💘 FindYourDate</div>
+    <p>Interactive Project Architecture Visualizer</p>
+  </div>
+</header>
+
+<!-- ════════════════════════════════ TABS ════════════════════════════════ -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="showTab('routes')">Routes</button>
+  <button class="tab-btn" onclick="showTab('flow')">Route Flow</button>
+  <button class="tab-btn" onclick="showTab('models')">Data Models</button>
+  <button class="tab-btn" onclick="showTab('journey')">User Journey</button>
+  <button class="tab-btn" onclick="showTab('realtime')">Real-time</button>
+</div>
+
+<!-- ════════════════════════════ PANEL: OVERVIEW ════════════════════════ -->
+<div id="panel-overview" class="panel active">
+
+  <p class="section-title">At a glance</p>
+  <div class="card-grid">
+    <div class="stat-card c1"><div class="num">9</div><div class="label">Routes</div></div>
+    <div class="stat-card c2"><div class="num">3</div><div class="label">DB Models</div></div>
+    <div class="stat-card c3"><div class="num">2</div><div class="label">Socket Events</div></div>
+    <div class="stat-card c4"><div class="num">5</div><div class="label">User Screens</div></div>
+  </div>
+
+  <p class="section-title">Tech stack</p>
+  <div class="badge-wrap">
+    <div class="badge"><span class="dot" style="background:#4ade80"></span>Node.js + Express 5</div>
+    <div class="badge"><span class="dot" style="background:#60a5fa"></span>MongoDB + Mongoose</div>
+    <div class="badge"><span class="dot" style="background:#f472b6"></span>Socket.IO 4</div>
+    <div class="badge"><span class="dot" style="background:#a78bfa"></span>EJS Templates</div>
+    <div class="badge"><span class="dot" style="background:#fb923c"></span>JWT + bcrypt Auth</div>
+    <div class="badge"><span class="dot" style="background:#34d399"></span>Multer (File Uploads)</div>
+    <div class="badge"><span class="dot" style="background:#fbbf24"></span>Python (DeepFace AI)</div>
+    <div class="badge"><span class="dot" style="background:#38bdf8"></span>Bootstrap 5 UI</div>
+  </div>
+
+  <p class="section-title">What the app does</p>
+  <div class="model-grid" style="margin-bottom:0">
+    <div class="model-card">
+      <div class="model-head"><span class="icon">🤖</span>AI Face Matching</div>
+      <div style="padding:14px 18px; font-size:13px; color:var(--muted); line-height:1.7">
+        Users upload a half-face AI photo. The server runs a Python
+        <code style="color:var(--accent3)">compare.py</code> script (DeepFace) to find
+        other users whose <em>profile photos</em> match above a similarity threshold (0.68).
+      </div>
+    </div>
+    <div class="model-card">
+      <div class="model-head"><span class="icon">💬</span>Private Chat Rooms</div>
+      <div style="padding:14px 18px; font-size:13px; color:var(--muted); line-height:1.7">
+        Each match creates a unique <code style="color:var(--accent3)">room_Id</code> derived
+        from both users' sorted MongoDB IDs. Messages are persisted in MongoDB and delivered
+        in real-time via Socket.IO rooms.
+      </div>
+    </div>
+    <div class="model-card">
+      <div class="model-head"><span class="icon">🔐</span>JWT Authentication</div>
+      <div style="padding:14px 18px; font-size:13px; color:var(--muted); line-height:1.7">
+        On login a JWT is created and stored as an HTTP cookie (<code style="color:var(--accent3)">uid</code>).
+        Protected routes use a middleware that validates the token on every request.
+        Passwords are hashed with bcrypt (10 rounds).
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ PANEL: ROUTES ════════════════════════ -->
+<div id="panel-routes" class="panel">
+  <p class="section-title">All HTTP routes</p>
+  <div class="scroll-x">
+    <table class="route-table">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Auth</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody id="route-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════ PANEL: ROUTE FLOW ═══════════════════════ -->
+<div id="panel-flow" class="panel">
+  <p class="section-title">Interactive route dependency graph — drag nodes to rearrange</p>
+  <svg id="flow-canvas"></svg>
+</div>
+
+<!-- ════════════════════════════ PANEL: MODELS ══════════════════════════ -->
+<div id="panel-models" class="panel">
+  <p class="section-title">Mongoose schema explorer</p>
+  <div class="model-grid" id="model-grid"></div>
+</div>
+
+<!-- ══════════════════════════ PANEL: USER JOURNEY ══════════════════════ -->
+<div id="panel-journey" class="panel">
+  <p class="section-title">User journey</p>
+  <div class="journey" id="journey"></div>
+</div>
+
+<!-- ═══════════════════════════ PANEL: REAL-TIME ════════════════════════ -->
+<div id="panel-realtime" class="panel">
+  <p class="section-title">Socket.IO events</p>
+  <div class="socket-grid">
+    <div class="socket-card">
+      <h4>📥 <span class="evt">joinRoom</span></h4>
+      <p>Emitted by the client after navigating to a chat page.
+         The server calls <code>socket.join(roomId)</code> so the socket
+         is subscribed to that private room channel.</p>
+    </div>
+    <div class="socket-card">
+      <h4>💬 <span class="evt">messageFromUser</span> (client → server)</h4>
+      <p>Carries <code>{ roomId, message, senderId }</code>.
+         The server persists the message to MongoDB, then re-emits the
+         event back to all sockets in the room.</p>
+    </div>
+    <div class="socket-card">
+      <h4>📤 <span class="evt">messageFromUser</span> (server → clients)</h4>
+      <p>Broadcast to all members of the chat room so every open tab
+         receives the new message in real-time without polling.</p>
+    </div>
+    <div class="socket-card">
+      <h4>🗄️ Message persistence</h4>
+      <p>Each message is saved in <strong>ChatModel</strong> under its
+         <code>room_Id</code>. On page load, old messages are fetched from
+         MongoDB and rendered server-side via EJS before the socket
+         connection is established.</p>
+    </div>
+  </div>
+
+  <br/>
+  <p class="section-title">Chat room ID derivation</p>
+  <div class="model-card" style="max-width:480px">
+    <div class="model-head"><span class="icon">🔑</span>Deterministic Room ID</div>
+    <div style="padding:14px 18px; font-size:13px; color:var(--muted); line-height:1.8">
+      <code style="color:var(--accent3)">
+        roomId = [userA._id, userB._id].sort().join("_")
+      </code>
+      <br/><br/>
+      Sorting both IDs ensures that whether UserA or UserB initiates the
+      comparison, they always land in the <em>same</em> room — no duplicate
+      channels are ever created.
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════ SCRIPTS ══════════════════════════════ -->
+<script>
+/* ─── tab switching ─────────────────────────────────────────────────── */
+function showTab(id) {
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + id).classList.add('active');
+  event.currentTarget.classList.add('active');
+
+  if (id === 'flow') initFlow();
+}
+
+/* ─── route data ────────────────────────────────────────────────────── */
+const ROUTES = [
+  { method:'GET',  path:'/',                       auth:false, desc:'Redirects to /login' },
+  { method:'GET',  path:'/login',                  auth:false, desc:'Render login page (or redirect to /myprofile if already logged in)' },
+  { method:'POST', path:'/login',                  auth:false, desc:'Authenticate user, set JWT cookie, redirect to /myprofile' },
+  { method:'GET',  path:'/login/signup',           auth:false, desc:'Render signup page' },
+  { method:'POST', path:'/login/signup',           auth:false, desc:'Create new user (with photos), redirect to /login' },
+  { method:'GET',  path:'/myprofile',              auth:true,  desc:'Show logged-in user\'s profile page' },
+  { method:'POST', path:'/compare/:id',            auth:true,  desc:'Run Python AI face-match script and save results' },
+  { method:'GET',  path:'/myroom',                 auth:true,  desc:'List all chat rooms created by the current user' },
+  { method:'GET',  path:'/myroomchat/:id',         auth:true,  desc:'Open a specific chat room (user initiated)' },
+  { method:'GET',  path:'/roombyelse',             auth:true,  desc:'List rooms where others matched with current user' },
+  { method:'GET',  path:'/roombyelsechat/:id',     auth:true,  desc:'Open a chat room initiated by someone else' },
+  { method:'GET',  path:'/logout',                 auth:false, desc:'Clear JWT cookie and redirect to /login' },
+];
+
+const tbody = document.getElementById('route-tbody');
+ROUTES.forEach(r => {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><span class="method ${r.method}">${r.method}</span></td>
+    <td style="font-family:monospace;color:var(--accent3)">${r.path}</td>
+    <td>${r.auth ? '<span class="lock">🔒 required</span>' : '<span style="color:var(--muted);font-size:12px">public</span>'}</td>
+    <td style="color:var(--muted)">${r.desc}</td>`;
+  tbody.appendChild(tr);
+});
+
+/* ─── model data ────────────────────────────────────────────────────── */
+const MODELS = [
+  {
+    name:'UserModel', icon:'👤', color:'#e83e8c',
+    fields:[
+      { name:'name',                 type:'String',   flags:['req'] },
+      { name:'email_id',             type:'String',   flags:['req','uniq'] },
+      { name:'password',             type:'String',   flags:['req'] },
+      { name:'profile_photo',        type:'String',   flags:['req'] },
+      { name:'ai_half_photo',        type:'String',   flags:[] },
+      { name:'uploaded_at',          type:'Date',     flags:[] },
+      { name:'face_matches',         type:'[FaceMatch]', flags:['ref'] },
+      { name:'face_matches_by_else', type:'[FaceMatch]', flags:['ref'] },
+    ]
+  },
+  {
+    name:'ChatModel', icon:'💬', color:'#20c997',
+    fields:[
+      { name:'room_Id',   type:'String', flags:['req'] },
+      { name:'messages',  type:'[Message]', flags:[] },
+    ]
+  },
+  {
+    name:'FaceMatchSchema', icon:'🤖', color:'#6f42c1',
+    fields:[
+      { name:'matched_user_id', type:'ObjectId', flags:['ref'] },
+      { name:'room_Id',         type:'String',   flags:[] },
+      { name:'ai_image',        type:'String',   flags:[] },
+      { name:'distance',        type:'Number',   flags:[] },
+      { name:'confidence',      type:'Number',   flags:[] },
+    ]
+  },
+  {
+    name:'MessageSchema', icon:'✉️', color:'#fd7e14',
+    fields:[
+      { name:'message',   type:'String', flags:['req'] },
+      { name:'senderId',  type:'String', flags:['req'] },
+      { name:'createdAt', type:'Date',   flags:[] },
+    ]
+  },
+];
+
+const grid = document.getElementById('model-grid');
+MODELS.forEach(m => {
+  const flagHtml = f => {
+    const map = { req:'<span class="field-badge req">required</span>',
+                  uniq:'<span class="field-badge uniq">unique</span>',
+                  ref:'<span class="field-badge ref">ref</span>' };
+    return f.map(x => map[x]).join('');
+  };
+  const li = m.fields.map(f =>
+    `<li><span class="field-name">${f.name}${flagHtml(f.flags)}</span>
+         <span class="field-type">${f.type}</span></li>`
+  ).join('');
+
+  grid.innerHTML += `
+    <div class="model-card">
+      <div class="model-head" style="border-left:3px solid ${m.color}; padding-left:15px">
+        <span class="icon">${m.icon}</span>${m.name}
+      </div>
+      <ul class="field-list">${li}</ul>
+    </div>`;
+});
+
+/* ─── journey data ──────────────────────────────────────────────────── */
+const STEPS = [
+  { num:1, color:'#e83e8c', title:'Sign Up',      desc:'User registers with name, email, password, profile photo and an AI half-face photo.' },
+  { num:2, color:'#6f42c1', title:'Login',         desc:'Credentials verified, bcrypt hash compared, JWT cookie issued.' },
+  { num:3, color:'#20c997', title:'My Profile',    desc:'Logged-in user views their photos and triggers the AI face comparison.' },
+  { num:4, color:'#fd7e14', title:'AI Compare',    desc:'Python script (DeepFace) compares the half-face to all other users\' profile photos.' },
+  { num:5, color:'#38bdf8', title:'Chat Room',     desc:'Each match creates a unique room. Users exchange real-time messages via Socket.IO.' },
+];
+
+const jContainer = document.getElementById('journey');
+STEPS.forEach((s, i) => {
+  jContainer.innerHTML += `
+    <div class="step" style="border-left:3px solid ${s.color}">
+      <div class="step-num" style="background:${s.color}22; color:${s.color}">${s.num}</div>
+      <div class="step-body">
+        <h4 style="color:${s.color}">${s.title}</h4>
+        <p>${s.desc}</p>
+      </div>
+    </div>`;
+});
+
+/* ─── D3 force-directed route flow ──────────────────────────────────── */
+let flowInited = false;
+
+function initFlow() {
+  if (flowInited) return;
+  flowInited = true;
+
+  const svg = d3.select('#flow-canvas');
+  const W = svg.node().clientWidth  || 900;
+  const H = svg.node().clientHeight || 580;
+
+  svg.attr('viewBox', `0 0 ${W} ${H}`);
+
+  const defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id','arrow')
+    .attr('viewBox','0 -5 10 10')
+    .attr('refX',22).attr('refY',0)
+    .attr('markerWidth',6).attr('markerHeight',6)
+    .attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5').attr('fill','#4e5a7a');
+
+  const nodes = [
+    { id:'/', label:'/',           type:'redirect', color:'#64748b' },
+    { id:'/login', label:'/login', type:'public',   color:'#6f42c1' },
+    { id:'/signup', label:'/signup', type:'public', color:'#6f42c1' },
+    { id:'/myprofile', label:'/myprofile', type:'protected', color:'#e83e8c' },
+    { id:'/compare', label:'/compare/:id', type:'protected', color:'#fd7e14' },
+    { id:'/myroom', label:'/myroom', type:'protected', color:'#20c997' },
+    { id:'/myroomchat', label:'/myroomchat/:id', type:'protected', color:'#20c997' },
+    { id:'/roombyelse', label:'/roombyelse', type:'protected', color:'#38bdf8' },
+    { id:'/roombyelsechat', label:'/roombyelsechat/:id', type:'protected', color:'#38bdf8' },
+    { id:'/logout', label:'/logout', type:'public', color:'#94a3b8' },
+    { id:'python', label:'Python AI', type:'external', color:'#facc15' },
+    { id:'mongodb', label:'MongoDB', type:'external', color:'#4ade80' },
+    { id:'socketio', label:'Socket.IO', type:'external', color:'#f472b6' },
+  ];
+
+  const links = [
+    { source:'/', target:'/login' },
+    { source:'/login', target:'/myprofile' },
+    { source:'/signup', target:'/login' },
+    { source:'/myprofile', target:'/compare' },
+    { source:'/compare', target:'python' },
+    { source:'/compare', target:'mongodb' },
+    { source:'/compare', target:'/myprofile' },
+    { source:'/myprofile', target:'/myroom' },
+    { source:'/myprofile', target:'/roombyelse' },
+    { source:'/myroom', target:'/myroomchat' },
+    { source:'/roombyelse', target:'/roombyelsechat' },
+    { source:'/myroomchat', target:'socketio' },
+    { source:'/roombyelsechat', target:'socketio' },
+    { source:'socketio', target:'mongodb' },
+    { source:'/logout', target:'/login' },
+    { source:'/myprofile', target:'/logout' },
+  ];
+
+  const sim = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(120))
+    .force('charge', d3.forceManyBody().strength(-400))
+    .force('center', d3.forceCenter(W/2, H/2))
+    .force('collision', d3.forceCollide(50));
+
+  const link = svg.append('g').selectAll('line')
+    .data(links).join('line')
+    .attr('stroke','#4e5a7a').attr('stroke-width',1.5)
+    .attr('marker-end','url(#arrow)');
+
+  const node = svg.append('g').selectAll('g')
+    .data(nodes).join('g')
+    .call(d3.drag()
+      .on('start', (event, d) => { if (!event.active) sim.alphaTarget(.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag',  (event, d) => { d.fx=event.x; d.fy=event.y; })
+      .on('end',   (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx=null; d.fy=null; })
+    );
+
+  node.append('rect')
+    .attr('rx',8).attr('ry',8)
+    .attr('x',-64).attr('y',-18)
+    .attr('width',128).attr('height',36)
+    .attr('fill', d => d.color + '22')
+    .attr('stroke', d => d.color)
+    .attr('stroke-width',1.5);
+
+  node.append('text')
+    .attr('text-anchor','middle').attr('dy','0.35em')
+    .attr('fill', d => d.color)
+    .attr('font-size', d => d.type === 'external' ? 12 : 11)
+    .attr('font-weight', 600)
+    .text(d => d.label);
+
+  // legend
+  const legend = [
+    { label:'Public route',    color:'#6f42c1' },
+    { label:'Protected route', color:'#e83e8c' },
+    { label:'External service',color:'#facc15' },
+    { label:'Redirect',        color:'#64748b' },
+  ];
+  const lg = svg.append('g').attr('transform','translate(16,16)');
+  legend.forEach((l, i) => {
+    lg.append('rect').attr('x',0).attr('y',i*22).attr('width',12).attr('height',12)
+      .attr('rx',3).attr('fill', l.color+'44').attr('stroke', l.color);
+    lg.append('text').attr('x',18).attr('y',i*22+10).attr('fill','#94a3b8')
+      .attr('font-size',11).text(l.label);
+  });
+
+  sim.on('tick', () => {
+    link
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    node.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+}
+</script>
+</body>
+</html>
