@@ -682,10 +682,13 @@ function update(dt) {
 ══════════════════════════════════════════════════════════ */
 
 const clock = new THREE.Clock();
+/* Cap delta so animation doesn't jump when the tab is backgrounded or the
+   system is under heavy load (e.g. first frame after the AI script runs). */
+const MAX_FRAME_TIME = 0.1;
 
 function animate() {
   requestAnimationFrame(animate);
-  const dt = Math.min(clock.getDelta(), 0.1);
+  const dt = Math.min(clock.getDelta(), MAX_FRAME_TIME);
 
   /* gentle idle rotation on all node cubes */
   Object.values(nodeObj).forEach(n => {
